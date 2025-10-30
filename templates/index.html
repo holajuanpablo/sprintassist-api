@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design Sprint AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc;
+        }
+        .chat-message.user {
+            background-color: #d1e7dd; /* Light blue/green for user */
+            border-bottom-right-radius: 4px; /* Default for user */
+        }
+        .chat-message.assistant {
+            background-color: #ffffff; /* White for assistant */
+            border-bottom-left-radius: 4px; /* Default for assistant */
+        }
+        /* Custom corner rounding for chat bubbles */
+        .chat-message.user.rounded-lg { border-bottom-right-radius: 0.5rem; }
+        .chat-message.assistant.rounded-lg { border-bottom-left-radius: 0.5rem; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl bg-white rounded-xl shadow-lg flex flex-col h-[90vh]">
+        
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800">Design Sprint AI Assistant</h1>
+            <p class="text-sm text-gray-500 mt-1">Powered by Vertex AI and Gemini - xxxxx</p>
+        </div>
+
+        <!-- Chat History -->
+        <div id="chat-history" class="flex-1 p-6 space-y-4 overflow-y-auto">
+            <!-- Initial Message from Assistant is handled by JS now for consistency -->
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="p-6 border-t border-gray-200">
+            <div class="flex items-center space-x-4 mb-4">
+                <input type="file" id="file-upload" class="flex-1 block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100 cursor-pointer"/>
+                <button id="upload-button" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition duration-300">
+                    Upload
+                </button>
+            </div>
+            <p id="upload-status" class="text-sm text-gray-500 hidden"></p>
+        </div>
+
+        <!-- Chat Input -->
+        <div class="p-6 border-t border-gray-200">
+            <div class="flex items-center space-x-4">
+                <input type="text" id="chat-input" placeholder="Type your message here..."
+                       class="flex-1 p-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="send-button" class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition duration-300">
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State and Configuration ---
+        // Replace with your Cloud Run service URL
+        const API_ENDPOINT_URL = "https://sprintassist-api-190505688477.us-central1.run.app";
+        
+        // CRITICAL: This array stores the entire conversation history.
+        let chatHistory = [];
+
+        // --- DOM Elements ---
+        const chatHistoryContainer = document.getElementById('chat-history');
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const fileUpload = document.getElementById('file-upload');
+        const uploadButton = document.getElementById('upload-button');
+        const uploadStatus = document.getElementById('upload-status');
+        
+        // --- Initialization ---
+        const initialMessage = "Hello! I'm your AI assistant for Google Design Sprints. How can I help you today?";
+        
+        // Add the initial message to the DOM and history when the page loads
+        window.onload = () => {
+            appendMessage(initialMessage, 'assistant');
+        };
+
+        // --- Helper Functions ---
+        /**
+         * Adds a message to the DOM and (if relevant) to the chatHistory state.
+         * @param {string} text The message content.
+         * @param {string} sender 'user' or 'assistant'.
+         */
+        function appendMessage(text, sender) {
+            const messageElement = document.createElement('div');
+            // Use the correct class for alignment
+            const alignmentClass = sender === 'user' ? 'ml-auto' : 'mr-auto';
+            
+            messageElement.classList.add('chat-message', sender, alignmentClass, 'p-4', 'rounded-lg', 'shadow-md', 'max-w-[80%]');
+            
+            // Basic markdown formatting for newlines
+            messageElement.innerHTML = text.replace(/\n/g, '<br>');
+
+            chatHistoryContainer.appendChild(messageElement);
+            chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
+
+            // Only add to history if it's not the "thinking" message or a temporary status message
+            if (text !== 'Assistant is thinking...' && text !== 'Sorry, an error occurred. Please try again.') {
+                const role = sender === 'user' ? 'user' : 'model'; // Use 'model' for the agent's role
+                chatHistory.push({ 
+                    role: role, 
+                    parts: [{ text: text }] 
+                });
+            }
+        }
+
+        async function sendMessage(prompt) {
+            // 1. Add user message to DOM and History
+            appendMessage(prompt, 'user');
+            chatInput.value = '';
+
+            // Disable input while loading
+            sendButton.disabled = true;
+            chatInput.disabled = true;
+
+            // 2. Add "thinking" message
+            appendMessage('Assistant is thinking...', 'assistant');
+
+            // 3. Prepare the request payload
+            // IMPORTANT: We send the ENTIRE chatHistory to maintain context.
+            // You MUST update your Cloud Run service backend (/chat endpoint)
+            // to accept the 'contents' array and pass it directly to your
+            // Vertex AI agent call instead of just the 'prompt'.
+            const payload = {
+                // Send the full conversation history in the standard format
+                contents: chatHistory
+            };
+            
+            try {
+                const response = await fetch(`${API_ENDPOINT_URL}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload), // Now sending history
+                });
+
+                const data = await response.json();
+                
+                // 4. Remove "thinking" message
+                chatHistoryContainer.lastChild.remove(); 
+
+                const responseText = data.response || 'I apologize, I received an empty response from the agent.';
+                
+                // 5. Add assistant response to DOM and History
+                appendMessage(responseText, 'assistant');
+
+            } catch (error) {
+                // Remove "thinking" message and show error
+                chatHistoryContainer.lastChild.remove(); 
+                appendMessage('Sorry, an error occurred. Please try again.', 'assistant');
+                console.error('Error:', error);
+            } finally {
+                // Re-enable input
+                sendButton.disabled = false;
+                chatInput.disabled = false;
+            }
+        }
+
+        async function uploadFile(file) {
+            uploadStatus.textContent = 'Uploading file...';
+            uploadStatus.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_ENDPOINT_URL}/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                uploadStatus.textContent = data.message;
+                setTimeout(() => uploadStatus.classList.add('hidden'), 5000);
+
+                // Optional: Notify the user they can now ask questions about the file
+                if (response.ok) {
+                    appendMessage(`File "${file.name}" uploaded successfully and is now part of the knowledge base. How can I use this information to help plan your sprint?`, 'assistant');
+                }
+
+            } catch (error) {
+                uploadStatus.textContent = 'Sorry, an error occurred during upload.';
+                console.error('Error:', error);
+            }
+        }
+
+        // --- Event Listeners ---
+        sendButton.addEventListener('click', () => {
+            const prompt = chatInput.value.trim();
+            if (prompt) {
+                sendMessage(prompt);
+            }
+        });
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                sendMessage(chatInput.value.trim());
+            }
+        });
+        
+        uploadButton.addEventListener('click', () => {
+            const file = fileUpload.files[0];
+            if (file) {
+                uploadFile(file);
+            } else {
+                // Replaced alert() with console log and status message
+                uploadStatus.textContent = 'Please select a file to upload.';
+                uploadStatus.classList.remove('hidden');
+                setTimeout(() => uploadStatus.classList.add('hidden'), 3000);
+                console.log('Please select a file to upload.');
+            }
+        });
+
+    </script>
+
+</body>
+</html>
