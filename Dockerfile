@@ -11,4 +11,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "my_flask_app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+
