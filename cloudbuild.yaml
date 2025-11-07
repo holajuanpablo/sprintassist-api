@@ -1,0 +1,38 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central-1-docker.pkg.dev/sprintassistai-sandbox-148085/gcr.io/sprintassist-api:$COMMIT_SHA'
+      - '.'
+    id: 'Build'
+
+  # Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central-1-docker.pkg.dev/sprintassistai-sandbox-148085/gcr.io/sprintassist-api:$COMMIT_SHA'
+    id: 'Push'
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'sprintassist-api' # Replace with your Cloud Run service name
+      - '--image'
+      - 'us-central-1-docker.pkg.dev/sprintassistai-sandbox-148085/gcr.io/sprintassist-api:$COMMIT_SHA'
+      - '--region'
+      - 'us-central-1' # Replace with your Cloud Run service region
+      - '--platform'
+      - 'managed'
+      # Add other flags if needed, e.g., --allow-unauthenticated
+    id: 'Deploy'
+
+images:
+  - 'us-central-1-docker.pkg.dev/sprintassistai-sandbox-148085/gcr.io/sprintassist-api:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
