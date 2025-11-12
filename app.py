@@ -76,8 +76,30 @@ def initialize_rag_model():
 
 @app.route("/")
 def index():
-    """Serves the index.html file. Testing with placeholder text"""
+"""Serves the index.html file."""
+print("--- Request to / route ---")
+try:
+    template_folder = os.path.abspath(app.template_folder)
+    index_path = os.path.join(template_folder, "index.html")
+    print(f"Flask template folder: {template_folder}")
+    print(f"Expected index.html path: {index_path}")
+
+    # Check existence
+    print(f"Contents of WORKDIR (/app): {os.listdir('/app')}")
+    print(f"Contents of template folder ({template_folder}): {os.listdir(template_folder) if os.path.isdir(template_folder) else 'DOES NOT EXIST'}")
+    print(f"templates folder exists: {os.path.isdir(template_folder)}")
+    print(f"index.html file exists: {os.path.isfile(index_path)}")
+
+    if not os.path.isfile(index_path):
+        return jsonify({"error": "index.html not found at " + index_path, "details": "Check build process and .dockerignore"}), 404
+
     return render_template("index.html")
+except Exception as e:
+    print(f"Error in / route: {str(e)}")
+    # Log the full traceback for more details
+    import traceback
+    print(traceback.format_exc())
+    return jsonify({"error": "Error rendering page", "details": str(e)}), 500
 
 @app.route("/chat", methods=["POST"])
 def chat():
