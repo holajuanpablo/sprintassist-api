@@ -24,4 +24,4 @@ RUN if [ -f "/app/templates/index.html" ]; then echo "Found /app/templates/index
 # --- End Optional: Build-time checks ---
 
 # --- Run the application using Gunicorn ---
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--log-level", "debug", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--log-level", "debug", "app:app"]
