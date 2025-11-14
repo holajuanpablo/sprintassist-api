@@ -58,6 +58,7 @@ print("--- app.py: Flask app created ---")
 # Global variables for RAG model and tools
 rag_model = None
 rag_corpus = None
+_model_initialized = False
 _model_init_lock = threading.Lock()
 
 print("--- app.py: Initializing storage_client ---")
@@ -114,24 +115,26 @@ def initialize_rag_model():
         print(f"Error details: {str(e)}")
         traceback.print_exc()
         rag_model = None
-        # Do not re-raise here in before_first_request, handle in route
+        # Re-raise to signal failure to the calling function
+        raise
     print("--- initialize_rag_model: END ---")
 
-@app.before_first_request
-def load_model():
-    global rag_model
-    # Use a lock to ensure initialization only happens once
+@app.before_request
+def ensure_model_is_loaded():
+    global _model_initialized, rag_model, rag_corpus
+    if _model_initialized:
+        return
+
     with _model_init_lock:
-        if not rag_model:
-            print("--- app.py: Calling initialize_rag_model (before first request) ---")
+        if not _model_initialized:
+            print("--- app.py: Calling initialize_rag_model (before request) ---")
             try:
                 initialize_rag_model()
+                _model_initialized = True
                 print("--- app.py: initialize_rag_model call complete ---")
             except Exception as e:
                  print(f"--- app.py: initialize_rag_model failed: {e} ---")
-                 # rag_model remains None
-        else:
-            print("--- app.py: Model already initialized ---")
+                 # rag_model and rag_corpus remain None
 
 # --- API Endpoints ---
 @app.route("/")
@@ -141,9 +144,7 @@ def index():
     try:
         template_folder = os.path.abspath(app.template_folder)
         index_path = os.path.join(template_folder, "index.html")
-        print(f"Flask template folder: {template_folder}")
-        print(f"Expected index.html path: {index_path}")
-
+        # ... (rest of your index function with print statements)
         if os.path.exists('/app'):
             print(f"Contents of WORKDIR (/app): {os.listdir('/app')}")
         else:
@@ -173,10 +174,7 @@ def chat():
     """
     global rag_model
     if not rag_model:
-        print("--- CHAT: RAG model not initialized, attempting to load ---")
-        load_model() # Attempt to initialize if not done yet
-        if not rag_model:
-             return jsonify({"error": "RAG model not initialized. Check server logs."}), 500
+         return jsonify({"error": "RAG model not available. Check server logs for initialization errors."}), 500
 
     request_data = request.get_json()
     conversation_history_dicts = request_data.get("contents")
@@ -205,10 +203,7 @@ def upload_file():
     """Endpoint to upload a file and update the RAG corpus."""
     global rag_corpus
     if not rag_corpus:
-        print("--- UPLOAD: RAG model/corpus not initialized, attempting to load ---")
-        load_model() # Attempt to initialize if not done yet
-        if not rag_corpus:
-             return jsonify({"error": "RAG Corpus is not initialized or found."}), 500
+             return jsonify({"error": "RAG Corpus not available. Check server logs for initialization errors."}), 500
 
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
