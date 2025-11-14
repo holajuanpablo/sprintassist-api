@@ -6,7 +6,37 @@ from google.cloud import storage
 from vertexai.generative_models import GenerativeModel, Tool, Content, Part
 from vertexai.preview import rag
 import traceback
-import time # <--- IMPORT  TIME
+import time # <--- IMPORT TIME
+import threading # <--- IMPORT THREADING
+
+print("--- app.py: VERY VERY TOP ---")
+t_start = time.time()
+last_lap = t_start
+
+def print_lap(msg):
+    global last_lap
+    now = time.time()
+    print(f"--- LAP {msg}: {now - last_lap:.3f}s ---")
+    last_lap = now
+
+print_lap("Initial")
+
+import os
+    print_lap("After os import")
+import vertexai
+print_lap("After vertexai import")
+from flask import Flask, request, jsonify, render_template
+print_lap("After flask import")
+from google.cloud import storage
+print_lap("After google.cloud.storage import")
+from vertexai.generative_models import GenerativeModel, Tool, Content, Part
+print_lap("After vertexai.generative_models import")
+from vertexai.preview import rag
+print_lap("After vertexai.preview.rag import")
+import traceback
+print_lap("After traceback import")
+
+print(f"--- app.py: Total import time: {time.time() - t_start:.3f}s ---")
 
 # --- Configuration ---
 PROJECT_ID = "sprintassistai-sandbox-148085"
@@ -15,13 +45,14 @@ RAG_CORPUS_DISPLAY_NAME = "SprintAssist-corpus-1"
 GCS_BUCKET_NAME = "sprintassist-corpus-files"
 
 # --- Initialization ---
-print("--- app.py: Top level execution ---")
+print("--- app.py: Flask app creating ---")
 app = Flask(__name__)
 print("--- app.py: Flask app created ---")
 
 # Global variables for RAG model and tools
 rag_model = None
-rag_corpus = None 
+rag_corpus = None
+_model_init_lock = threading.Lock()
 
 print("--- app.py: Initializing storage_client ---")
 start_client_init = time.time()
@@ -77,13 +108,24 @@ def initialize_rag_model():
         print(f"Error details: {str(e)}")
         traceback.print_exc()
         rag_model = None
-        raise e
+        # Do not re-raise here in before_first_request, handle in route
     print("--- initialize_rag_model: END ---")
 
-# --- Call initialize_rag_model at module load time ---
-print("--- app.py: Calling initialize_rag_model at module load ---")
-initialize_rag_model()
-print("--- app.py: initialize_rag_model call complete ---")
+@app.before_first_request
+def load_model():
+    global rag_model
+    # Use a lock to ensure initialization only happens once
+    with _model_init_lock:
+        if not rag_model:
+            print("--- app.py: Calling initialize_rag_model (before first request) ---")
+            try:
+                initialize_rag_model()
+                print("--- app.py: initialize_rag_model call complete ---")
+            except Exception as e:
+                 print(f"--- app.py: initialize_rag_model failed: {e} ---")
+                 # rag_model remains None
+        else:
+            print("--- app.py: Model already initialized ---")
 
 # --- API Endpoints ---
 @app.route("/")
@@ -96,9 +138,16 @@ def index():
         print(f"Flask template folder: {template_folder}")
         print(f"Expected index.html path: {index_path}")
 
-        # Check existence
-        print(f"Contents of WORKDIR (/app): {os.listdir('/app')}")
-        print(f"Contents of template folder ({template_folder}): {os.listdir(template_folder) if os.path.isdir(template_folder) else 'DOES NOT EXIST'}")
+        if os.path.exists('/app'):
+            print(f"Contents of WORKDIR (/app): {os.listdir('/app')}")
+        else:
+            print("/app does not exist")
+
+        if os.path.isdir(template_folder):
+             print(f"Contents of template folder ({template_folder}): {os.listdir(template_folder)}")
+        else:
+             print(f"Template folder {template_folder} DOES NOT EXIST")
+
         print(f"templates folder exists: {os.path.isdir(template_folder)}")
         print(f"index.html file exists: {os.path.isfile(index_path)}")
 
@@ -108,7 +157,6 @@ def index():
         return render_template("index.html")
     except Exception as e:
         print(f"Error in / route: {str(e)}")
-        # Log the full traceback for more details
         print(traceback.format_exc())
         return jsonify({"error": "Error rendering page", "details": str(e)}), 500
 
@@ -116,16 +164,15 @@ def index():
 def chat():
     """
     Endpoint for a chat query.
-    MODIFIED: Now accepts the full 'contents' array (conversation history)
-    and converts it to the format required by the Vertex AI SDK.
     """
     global rag_model
-    
     if not rag_model:
-        return jsonify({"error": "RAG model not initialized. Check server logs."}), 500
+        print("--- CHAT: RAG model not initialized, attempting to load ---")
+        load_model() # Attempt to initialize if not done yet
+        if not rag_model:
+             return jsonify({"error": "RAG model not initialized. Check server logs."}), 500
 
     request_data = request.get_json()
-    
     conversation_history_dicts = request_data.get("contents")
 
     if not conversation_history_dicts or not isinstance(conversation_history_dicts, list):
@@ -136,13 +183,7 @@ def chat():
         for turn in conversation_history_dicts:
             role = turn['role']
             text = turn['parts'][0]['text']
-            
-            contents_for_sdk.append(
-                Content(
-                    role=role,
-                    parts=[Part.from_text(text)]
-                )
-            )
+            contents_for_sdk.append(Content(role=role, parts=[Part.from_text(text)]))
     except (KeyError, IndexError) as e:
         return jsonify({"error": f"Invalid structure in chat history payload: {str(e)}"}), 400
 
@@ -156,9 +197,15 @@ def chat():
 @app.route("/upload", methods=["POST"])
 def upload_file():
     """Endpoint to upload a file and update the RAG corpus."""
+    global rag_corpus
+    if not rag_corpus:
+        print("--- UPLOAD: RAG model/corpus not initialized, attempting to load ---")
+        load_model() # Attempt to initialize if not done yet
+        if not rag_corpus:
+             return jsonify({"error": "RAG Corpus is not initialized or found."}), 500
+
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
-
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
@@ -179,26 +226,15 @@ def upload_file():
             print(f"Uploading {file.filename} to gs://{GCS_BUCKET_NAME}/{file.filename}")
             blob.upload_from_file(file)
             gcs_uri = f"gs://{GCS_BUCKET_NAME}/{file.filename}"
-            
             print(f"File uploaded to {gcs_uri}. Starting RAG import...")
-            
-            if not rag_corpus:
-                 print("--- ERROR: RAG Corpus not initialized in upload_file ---")
-                 return jsonify({"error": "RAG Corpus is not initialized or found."}), 500
 
-            import_response = rag.import_files(
-                corpus_name=rag_corpus.name,
-                paths=[gcs_uri]
-            )
-
+            import_response = rag.import_files(corpus_name=rag_corpus.name, paths=[gcs_uri])
             print(f"RAG import finished. Imported: {import_response.imported_rag_files_count}, Skipped: {import_response.skipped_rag_files_count}")
-
             return jsonify({"message": f"File '{file.filename}' uploaded and sent to RAG for processing."})
         except Exception as e:
             print(f"Error in upload_file: {str(e)}")
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
-    
     return jsonify({"error": "An unknown error occurred."}), 500
 
 print("--- app.py: End of file ---")
