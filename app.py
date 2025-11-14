@@ -22,17 +22,23 @@ def print_lap(msg):
 print_lap("Initial")
 
 import os
-    print_lap("After os import")
+print_lap("After os import")
+
 import vertexai
 print_lap("After vertexai import")
+
 from flask import Flask, request, jsonify, render_template
 print_lap("After flask import")
+
 from google.cloud import storage
 print_lap("After google.cloud.storage import")
+
 from vertexai.generative_models import GenerativeModel, Tool, Content, Part
 print_lap("After vertexai.generative_models import")
+
 from vertexai.preview import rag
 print_lap("After vertexai.preview.rag import")
+
 import traceback
 print_lap("After traceback import")
 
