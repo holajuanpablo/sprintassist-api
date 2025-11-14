@@ -21,7 +21,7 @@ print("--- app.py: Flask app created ---")
 
 # Global variables for RAG model and tools
 rag_model = None
-rag_corpus = None
+rag_corpus = None 
 
 print("--- app.py: Initializing storage_client ---")
 start_client_init = time.time()
