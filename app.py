@@ -6,7 +6,7 @@ from google.cloud import storage
 from vertexai.generative_models import GenerativeModel, Tool, Content, Part
 from vertexai.preview import rag
 import traceback
-import time # <--- IMPORT  TIME
+import time # <--- IMPORT TIME
 import threading # <--- IMPORT THREADING
 
 print("--- app.py: VERY VERY TOP ---")
@@ -144,7 +144,9 @@ def index():
     try:
         template_folder = os.path.abspath(app.template_folder)
         index_path = os.path.join(template_folder, "index.html")
-        # ... (rest of your index function with print statements)
+        print(f"Flask template folder: {template_folder}")
+        print(f"Expected index.html path: {index_path}")
+
         if os.path.exists('/app'):
             print(f"Contents of WORKDIR (/app): {os.listdir('/app')}")
         else:
