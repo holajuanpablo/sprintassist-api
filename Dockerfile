@@ -25,4 +25,5 @@ RUN if [ -f "/app/templates/index.html" ]; then echo "Found /app/templates/index
 
 # --- Run the application using Gunicorn ---
 # Increased timeout to 120 seconds to allow for slow module imports
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--log-level", "debug", "--timeout", "120", "app:app"]
+# Added --access-logfile - to send access logs to stdout
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--log-level", "debug", "--timeout", "120", "--access-logfile", "-", "app:app"]
