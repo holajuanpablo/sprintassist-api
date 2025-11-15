@@ -7,7 +7,7 @@ from vertexai.generative_models import GenerativeModel, Tool, Content, Part
 from vertexai.preview import rag
 import traceback
 import time # <--- IMPORT TIME
-import threading # <--- IMPORT  THREADING
+import threading # <--- IMPORT THREADING
 
 print("--- app.py: VERY VERY TOP ---")
 t_start = time.time()
@@ -139,35 +139,14 @@ def ensure_model_is_loaded():
 # --- API Endpoints ---
 @app.route("/")
 def index():
-    """Serves the index.html file."""
-    print("--- Request to / route IN INDEX FUNCTION ---")
-    try:
-        template_folder = os.path.abspath(app.template_folder)
-        index_path = os.path.join(template_folder, "index.html")
-        print(f"Flask template folder: {template_folder}")
-        print(f"Expected index.html path: {index_path}")
+    """Serves a simple string."""
+    print("--- Request to / route IN INDEX FUNCTION (Simple Version) ---")
+    return "Hello from SprintAssist API!", 200
 
-        if os.path.exists('/app'):
-            print(f"Contents of WORKDIR (/app): {os.listdir('/app')}")
-        else:
-            print("/app does not exist")
-
-        if os.path.isdir(template_folder):
-             print(f"Contents of template folder ({template_folder}): {os.listdir(template_folder)}")
-        else:
-             print(f"Template folder {template_folder} DOES NOT EXIST")
-
-        print(f"templates folder exists: {os.path.isdir(template_folder)}")
-        print(f"index.html file exists: {os.path.isfile(index_path)}")
-
-        if not os.path.isfile(index_path):
-            return jsonify({"error": "index.html not found at " + index_path, "details": "Check build process and .dockerignore"}), 404
-
-        return render_template("index.html")
-    except Exception as e:
-        print(f"Error in / route: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({"error": "Error rendering page", "details": str(e)}), 500
+@app.route("/test")
+def test_route():
+    print("--- Request to /test route ---")
+    return "Test route OK!", 200
 
 @app.route("/chat", methods=["POST"])
 def chat():
