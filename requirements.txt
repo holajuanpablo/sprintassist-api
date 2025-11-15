@@ -1,5 +1,2 @@
 Flask
-google-cloud-aiplatform
-google-cloud-storage
-google-auth
-gunicorn==23.0.0
+gunicorn

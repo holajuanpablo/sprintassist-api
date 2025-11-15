@@ -15,15 +15,8 @@ COPY . .
 # --- Optional: Build-time checks (can be kept or removed) ---
 RUN echo "--- Listing /app contents after COPY ---"
 RUN ls -lR /app
-
-RUN echo "--- Checking for templates directory ---"
-RUN if [ -d "/app/templates" ]; then echo "Found /app/templates"; ls -l /app/templates; else echo "ERROR: /app/templates NOT FOUND"; fi
-
-RUN echo "--- Checking for index.html ---"
-RUN if [ -f "/app/templates/index.html" ]; then echo "Found /app/templates/index.html"; else echo "ERROR: /app/templates/index.html NOT FOUND"; fi
 # --- End Optional: Build-time checks ---
 
 # --- Run the application using Gunicorn ---
-# Increased timeout to 120 seconds to allow for slow module imports
-# Added --access-logfile - to send access logs to stdout
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--log-level", "debug", "--timeout", "120", "--access-logfile", "-", "app:app"]
+# Reduced to 1 worker for simplicity, increased timeout, added access log
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--log-level", "debug", "--timeout", "120", "--access-logfile", "-", "app:app"]
