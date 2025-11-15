@@ -115,7 +115,7 @@ def initialize_rag_model():
         print("--- initialize_rag_model: Initializing GenerativeModel ---", file=sys.stderr, flush=True)
         t0 = time.time()
         # Ensure you are using the model name intended for your use case.
-        rag_model = GenerativeModel("gemini-1.5-flash", tools=[rag_tool])
+        rag_model = GenerativeModel("google/gemini-2.5-flash", tools=[rag_tool])
         print(f"--- initialize_rag_model: GenerativeModel init took {time.time() - t0:.2f}s ---", file=sys.stderr, flush=True)
 
         print(f"--- RAG-powered model configured successfully. Total init time: {time.time() - init_start_time:.2f} seconds ---", file=sys.stderr, flush=True)
