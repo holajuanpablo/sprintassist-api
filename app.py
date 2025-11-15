@@ -7,7 +7,7 @@ from vertexai.generative_models import GenerativeModel, Tool, Content, Part
 from vertexai.preview import rag
 import traceback
 import time # <--- IMPORT TIME
-import threading # <--- IMPORT THREADING
+import threading # <--- IMPORT  THREADING
 
 print("--- app.py: VERY VERY TOP ---")
 t_start = time.time()
