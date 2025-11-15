@@ -11,7 +11,7 @@ PROJECT_ID = "sprintassistai-sandbox-148085"
 LOCATION = "us-central1"
 
 # The display name of your RAG corpus.
-# This is the corpus you already created and populated.
+# This is the corpus you  already created and populated.
 RAG_CORPUS_DISPLAY_NAME = "SprintAssist-corpus-1"
 
 # A unique display name for your new RAG model and endpoint.
