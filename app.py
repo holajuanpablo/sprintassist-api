@@ -4,12 +4,50 @@ import time
 import threading
 import traceback
 import logging
+
 from flask import Flask, request, jsonify, render_template
 from google.cloud import storage
 import vertexai
 from vertexai.generative_models import GenerativeModel, Tool, Content, Part
 from vertexai.preview import rag
-from waitress import serve
+
+print("--- app.py: VERY VERY TOP ---", file=sys.stderr, flush=True)
+t_start = time.time()
+last_lap = t_start
+
+def print_lap(msg):
+    global last_lap
+    now = time.time()
+    print(f"--- LAP {msg}: {now - last_lap:.3f}s ---", file=sys.stderr, flush=True)
+    last_lap = now
+
+print_lap("Initial")
+
+import os
+print_lap("After os import")
+
+import vertexai
+print_lap("After vertexai import")
+
+from flask import Flask, request, jsonify, render_template
+print_lap("After flask import")
+
+from google.cloud import storage
+print_lap("After google.cloud.storage import")
+
+from vertexai.generative_models import GenerativeModel, Tool, Content, Part
+print_lap("After vertexai.generative_models import")
+
+from vertexai.preview import rag
+print_lap("After vertexai.preview.rag import")
+
+import traceback
+print_lap("After traceback import")
+
+import threading
+print_lap("After threading import")
+
+print(f"--- app.py: Total import time: {time.time() - t_start:.3f}s ---", file=sys.stderr, flush=True)
 
 # --- Configuration ---
 PROJECT_ID = "sprintassistai-sandbox-148085"
@@ -22,7 +60,7 @@ print("--- app.py: Flask app creating ---", file=sys.stderr, flush=True)
 app = Flask(__name__)
 print("--- app.py: Flask app created ---", file=sys.stderr, flush=True)
 
-# Global variables
+# Global variables for RAG model and tools
 rag_model = None
 rag_corpus = None
 _model_initialized = False
@@ -31,8 +69,9 @@ storage_client = None
 
 try:
     print("--- app.py: Initializing storage_client ---", file=sys.stderr, flush=True)
+    start_client_init = time.time()
     storage_client = storage.Client(project=PROJECT_ID)
-    print(f"--- app.py: storage_client initialized ---", file=sys.stderr, flush=True)
+    print(f"--- app.py: storage_client initialized in {time.time() - start_client_init:.2f}s ---", file=sys.stderr, flush=True)
 except Exception as e:
     print(f"--- ERROR: Failed to initialize storage_client: {e} ---", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
@@ -41,33 +80,53 @@ def initialize_rag_model():
     """Initializes the RAG model and finds the corpus."""
     global rag_model, rag_corpus
     print("--- initialize_rag_model: START ---", file=sys.stderr, flush=True)
-    # ... (rest of initialize_rag_model function as before) ...
+    init_start_time = time.time()
+
     try:
         print("--- initialize_rag_model: Calling vertexai.init ---", file=sys.stderr, flush=True)
+        t0 = time.time()
         vertexai.init(project=PROJECT_ID, location=LOCATION)
-        print(f"--- initialize_rag_model: vertexai.init complete ---", file=sys.stderr, flush=True)
+        print(f"--- initialize_rag_model: vertexai.init took {time.time() - t0:.2f}s ---", file=sys.stderr, flush=True)
 
         print(f"--- initialize_rag_model: Searching for RAG Corpus: '{RAG_CORPUS_DISPLAY_NAME}' ---", file=sys.stderr, flush=True)
+        t0 = time.time()
         all_corpora = list(rag.list_corpora())
+        print(f"--- initialize_rag_model: rag.list_corpora() took {time.time() - t0:.2f}s ---", file=sys.stderr, flush=True)
+
         corpus_list = [c for c in all_corpora if c.display_name == RAG_CORPUS_DISPLAY_NAME]
 
         if not corpus_list:
-            raise ValueError(f"Corpus '{RAG_CORPUS_DISPLAY_NAME}' not found.")
+            raise ValueError(f"Corpus '{RAG_CORPUS_DISPLAY_NAME}' not found. Please create it first.")
+
         rag_corpus = corpus_list[0]
         print(f"--- initialize_rag_model: Corpus found: {rag_corpus.name} ---", file=sys.stderr, flush=True)
 
+        print("--- initialize_rag_model: Creating Tool ---", file=sys.stderr, flush=True)
+        t0 = time.time()
         rag_tool = Tool.from_retrieval(
-            retrieval=rag.Retrieval(source=rag.VertexRagStore(rag_resources=[rag.RagResource(rag_corpus=rag_corpus.name)]))
+            retrieval=rag.Retrieval(
+                source=rag.VertexRagStore(
+                    rag_resources=[rag.RagResource(rag_corpus=rag_corpus.name)]
+                )
+            )
         )
-        print("--- initialize_rag_model: RAG Tool created ---", file=sys.stderr, flush=True)
+        print(f"--- initialize_rag_model: Tool.from_retrieval took {time.time() - t0:.2f}s ---", file=sys.stderr, flush=True)
 
+        print("--- initialize_rag_model: Initializing GenerativeModel ---", file=sys.stderr, flush=True)
+        t0 = time.time()
+        # Ensure you are using the model name intended for your use case.
         rag_model = GenerativeModel("gemini-1.5-flash", tools=[rag_tool])
-        print(f"--- RAG-powered model configured successfully ---", file=sys.stderr, flush=True)
+        print(f"--- initialize_rag_model: GenerativeModel init took {time.time() - t0:.2f}s ---", file=sys.stderr, flush=True)
+
+        print(f"--- RAG-powered model configured successfully. Total init time: {time.time() - init_start_time:.2f} seconds ---", file=sys.stderr, flush=True)
+
     except Exception as e:
-        print(f"--- FATAL RAG INITIALIZATION ERROR ---", file=sys.stderr, flush=True)
+        print(f"--- FATAL RAG INITIALIZATION ERROR --- Elapsed: {time.time() - init_start_time:.2f} seconds ---", file=sys.stderr, flush=True)
+        print(f"Failed to initialize RAG model. Check permissions and corpus name.", file=sys.stderr, flush=True)
         print(f"Error details: {str(e)}", file=sys.stderr, flush=True)
         traceback.print_exc(file=sys.stderr)
         rag_model = None
+        # Re-raise to signal failure to the calling function
         raise
     print("--- initialize_rag_model: END ---", file=sys.stderr, flush=True)
 
@@ -76,6 +135,7 @@ def ensure_model_is_loaded():
     global _model_initialized, rag_model, rag_corpus
     if _model_initialized:
         return
+
     with _model_init_lock:
         if not _model_initialized:
             print("--- app.py: Calling initialize_rag_model (before request) ---", file=sys.stderr, flush=True)
@@ -85,13 +145,40 @@ def ensure_model_is_loaded():
                 print("--- app.py: initialize_rag_model call complete ---", file=sys.stderr, flush=True)
             except Exception as e:
                  print(f"--- app.py: initialize_rag_model failed: {e} ---", file=sys.stderr, flush=True)
+                 # rag_model and rag_corpus remain None
 
 # --- API Endpoints ---
 @app.route("/")
 def index():
     """Serves the index.html file."""
     print("--- Request to / route IN INDEX FUNCTION ---", file=sys.stderr, flush=True)
-    return render_template("index.html")
+    try:
+        template_folder = os.path.abspath(app.template_folder)
+        index_path = os.path.join(template_folder, "index.html")
+        print(f"Flask template folder: {template_folder}", file=sys.stderr, flush=True)
+        print(f"Expected index.html path: {index_path}", file=sys.stderr, flush=True)
+
+        if os.path.exists('/app'):
+            print(f"Contents of WORKDIR (/app): {os.listdir('/app')}", file=sys.stderr, flush=True)
+        else:
+            print("/app does not exist", file=sys.stderr, flush=True)
+
+        if os.path.isdir(template_folder):
+             print(f"Contents of template folder ({template_folder}): {os.listdir(template_folder)}", file=sys.stderr, flush=True)
+        else:
+             print(f"Template folder {template_folder} DOES NOT EXIST", file=sys.stderr, flush=True)
+
+        print(f"templates folder exists: {os.path.isdir(template_folder)}", file=sys.stderr, flush=True)
+        print(f"index.html file exists: {os.path.isfile(index_path)}", file=sys.stderr, flush=True)
+
+        if not os.path.isfile(index_path):
+            return jsonify({"error": "index.html not found at " + index_path, "details": "Check build process and .dockerignore"}), 404
+
+        return render_template("index.html")
+    except Exception as e:
+        print(f"Error in / route: {str(e)}", file=sys.stderr, flush=True)
+        print(traceback.format_exc(), file=sys.stderr)
+        return jsonify({"error": "Error rendering page", "details": str(e)}), 500
 
 @app.route("/test")
 def test_route():
@@ -100,11 +187,12 @@ def test_route():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    """Endpoint for a chat query."""
-    print("--- CHAT: Request received ---", file=sys.stderr, flush=True)
+    """
+    Endpoint for a chat query.
+    """
     global rag_model
     if not rag_model:
-         print("--- CHAT: RAG model not initialized ---", file=sys.stderr, flush=True)
+         print("--- CHAT: RAG model not available. Check server logs for initialization errors. ---", file=sys.stderr, flush=True)
          return jsonify({"error": "RAG model not available. Check server logs."}), 500
 
     request_data = request.get_json()
@@ -140,9 +228,7 @@ def chat():
         print(f"--- CHAT: Response text: '{response_text}' ---", file=sys.stderr, flush=True)
 
         if not response_text.strip():
-             # This is where your frontend message comes from
              print("--- CHAT: Response text is empty ---", file=sys.stderr, flush=True)
-             #  Slightly more informative message for you
              return jsonify({"error": "I apologize, the agent's response was empty."}), 200
 
         return jsonify({"response": response_text})
@@ -151,7 +237,6 @@ def chat():
         traceback.print_exc(file=sys.stderr)
         return jsonify({"error": f"Agent generation failed: {str(e)}"}), 500
 
-# ... (upload_file route as before) ...
 @app.route("/upload", methods=["POST"])
 def upload_file():
     """Endpoint to upload a file and update the RAG corpus."""
@@ -195,9 +280,3 @@ def upload_file():
     return jsonify({"error": "An unknown error occurred."}), 500
 
 print("--- app.py: End of file ---", file=sys.stderr, flush=True)
-
-if __name__ == '__main__':
-    print("--- app.py: Running in main ---", file=sys.stderr, flush=True)
-    port = int(os.environ.get("PORT", 8080))
-    print(f"--- app.py: Starting server on 0.0.0.0:{port} ---", file=sys.stderr, flush=True)
-    serve(app, host='0.0.0.0', port=port)
